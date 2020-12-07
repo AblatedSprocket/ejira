@@ -676,6 +676,9 @@ of the document."
   "Find a value from fields L recursively with KEYS."
   (let ((value (let* (key exists)
                  (while (and keys (listp l))
+                   (when (and (listp (caar l))
+                              (not (cdr l)))
+                     (setq l (car l)))
                    (setq key (car keys))
                    (setq exists nil)
                    (mapc (lambda (item)
@@ -744,12 +747,12 @@ With EXCLUDE-COMMENT do not include comments in the search."
   "Assign issue KEY. With TO-ME set to t assign it to me."
   (let* ((jira-users (ejira--get-assignable-users key))
          (fullname (if to-me
-                       (cdr (assoc jiralib2-user-login-name jira-users))
+                       (cdr (assoc jiralib2-user-account-id jira-users))
                      (completing-read "Assignee: " (mapcar 'cdr jira-users))))
-         (username (car (rassoc fullname jira-users))))
-    (jiralib2-assign-issue key username)
+         (account-id (car (rassoc fullname jira-users))))
+    (jiralib2-assign-issue key account-id)
     (ejira--with-point-on key
-      (org-set-property "Assignee" (if username fullname "")))
+      (org-set-property "Assignee" (if account-id fullname "")))
 
     ;; If assigned to me, add tag.
     (if (equal fullname (ejira--my-fullname))
@@ -778,12 +781,12 @@ With SHALLOW update only todo state."
   (or ejira--user-cache
       (setq ejira--user-cache
             (append
-             '(("Unassigned" . ""))
+             '(("" . "Unassigned"))
              (remove nil
                      (mapcar (lambda (user)
                                (let ((name (decode-coding-string
                                             (cdr (assoc 'displayName user)) 'utf-8))
-                                     (key (cdr (assoc 'key user))))
+                                     (key (cdr (assoc 'accountId user))))
                                  (unless (s-starts-with? "#" key)
                                    (cons key name))))
                              (jiralib2-get-users (car ejira-projects))))))))
@@ -796,8 +799,8 @@ With SHALLOW update only todo state."
   (interactive)
   (let* ((jira-users (ejira--get-users))
          (fullname (completing-read "User: " (mapcar 'cdr jira-users)))
-         (username (car (rassoc fullname jira-users))))
-    (insert (format "[[jirauser:~%s]]" username))))
+         (account-id (car (rassoc fullname jira-users))))
+    (insert (format "[[~accountId:%s][%s]]" account-id fullname))))
 
 (defun ejira--get-assignable-users (issue-key)
   "Fetch users that issue ISSUE-KEY can be assigned to."
@@ -807,7 +810,7 @@ With SHALLOW update only todo state."
            (mapcar (lambda (user)
                      (let ((name (decode-coding-string
                                   (cdr (assoc 'displayName user)) 'utf-8))
-                           (key (cdr (assoc 'name user))))
+                           (key (cdr (assoc 'accountId user))))
                        (unless (s-starts-with? "#" key)
                          (cons key name))))
                    (jiralib2-get-assignable-users issue-key)))))
